@@ -100,17 +100,20 @@ class VideoApiTests(TestCase):
         self.user = get_user_model().objects.create_user(
             username="creator", email="creator@example.com", password="testpass"
         )
+        self.user.credits = 2
+        self.user.save()
+        self.auth_headers = {"HTTP_AUTHORIZATION": f"Bearer {self.user.api_token}"}
 
     def _post(self, path: str, payload: dict) -> dict:
         response = self.client.post(
-            path, data=json.dumps(payload), content_type="application/json"
+            path, data=json.dumps(payload), content_type="application/json", **self.auth_headers
         )
         self.assertLess(response.status_code, 500)
         return {"status": response.status_code, "data": response.json() if response.content else {}}
 
     def _patch(self, path: str, payload: dict) -> dict:
         response = self.client.patch(
-            path, data=json.dumps(payload), content_type="application/json"
+            path, data=json.dumps(payload), content_type="application/json", **self.auth_headers
         )
         self.assertLess(response.status_code, 500)
         return {"status": response.status_code, "data": response.json() if response.content else {}}
@@ -123,7 +126,7 @@ class VideoApiTests(TestCase):
         self.assertEqual(create_resp["status"], 201)
         video_id = create_resp["data"]["id"]
 
-        list_resp = self.client.get("/api/videos/")
+        list_resp = self.client.get("/api/videos/", **self.auth_headers)
         self.assertEqual(list_resp.status_code, 200)
         payload = list_resp.json()
         items = payload["results"] if isinstance(payload, dict) and "results" in payload else payload
@@ -134,7 +137,10 @@ class VideoApiTests(TestCase):
         )
         self.assertEqual(update_resp["data"]["status"], VideoStatus.COMPLETED)
 
-        delete_resp = self.client.delete(f"/api/videos/{video_id}/")
+        status_resp = self.client.get(f"/api/videos/{video_id}/status", **self.auth_headers)
+        self.assertEqual(status_resp.status_code, 200)
+
+        delete_resp = self.client.delete(f"/api/videos/{video_id}/", **self.auth_headers)
         self.assertEqual(delete_resp.status_code, 204)
 
     def test_product_and_market_crud_flow(self):
@@ -165,9 +171,8 @@ class VideoApiTests(TestCase):
         product_id = self._post("/api/products/", {"name": "Lens"})["data"]["id"]
 
         vp_resp = self._post(
-            "/api/video-products/",
+            f"/api/videos/{video_id}/products",
             {
-                "video_id": video_id,
                 "product_id": product_id,
                 "name": "Prime lens",
                 "timestamp": "00:10",
@@ -179,10 +184,28 @@ class VideoApiTests(TestCase):
         vp_id = vp_resp["data"]["id"]
 
         patch_resp = self._patch(
-            f"/api/video-products/{vp_id}/", {"is_reviewed": True, "sort_order": 3}
+            f"/api/videos/{video_id}/products/{vp_id}",
+            {"is_reviewed": True, "sort_order": 3, "amazon_url": "https://amazon.com/dp/B001234567"},
         )
         self.assertTrue(patch_resp["data"]["is_reviewed"])
         self.assertEqual(patch_resp["data"]["sort_order"], 3)
+
+        products_resp = self.client.get(f"/api/videos/{video_id}/products", **self.auth_headers)
+        self.assertEqual(products_resp.status_code, 200)
+        self.assertGreaterEqual(len(products_resp.json()), 1)
+
+    def test_credit_required_for_submit(self):
+        self.user.credits = 0
+        self.user.save()
+        resp = self._post(
+            "/api/videos/",
+            {
+                "user_id": self.user.id,
+                "youtube_url": "https://youtu.be/nope",
+                "slug": "no-credit",
+            },
+        )
+        self.assertEqual(resp["status"], 402)
 
 
 class ApiDocsTests(TestCase):

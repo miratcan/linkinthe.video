@@ -49,6 +49,7 @@ class AuthLoginSchema(Schema):
 class AuthResponseSchema(Schema):
     user: UserSchema
     session: Optional[str] = None
+    token: str
 
 
 @router.get("users/", response=list[UserSchema])
@@ -102,7 +103,7 @@ def register(request, payload: AuthRegisterSchema):
     username = payload.username or payload.email.split("@")[0]
     user = User.objects.create_user(username=username, email=payload.email, password=payload.password)
     login(request, user, backend="django.contrib.auth.backends.ModelBackend")
-    return 201, {"user": user, "session": request.session.session_key}
+    return 201, {"user": user, "session": request.session.session_key, "token": user.api_token}
 
 
 @router.post("auth/login", response=AuthResponseSchema)
@@ -113,7 +114,7 @@ def auth_login(request, payload: AuthLoginSchema):
     if not user:
         return 401, {"detail": "Invalid credentials"}
     login(request, user, backend="django.contrib.auth.backends.ModelBackend")
-    return {"user": user, "session": request.session.session_key}
+    return {"user": user, "session": request.session.session_key, "token": user.api_token}
 
 
 @router.post("auth/logout", response={204: None})
@@ -126,7 +127,7 @@ def auth_logout(request):
 def auth_me(request):
     if not request.user.is_authenticated:
         return 401, {"detail": "Not authenticated"}
-    return {"user": request.user, "session": request.session.session_key}
+    return {"user": request.user, "session": request.session.session_key, "token": request.user.api_token}
 
 
 @router.post("auth/google", response=dict)

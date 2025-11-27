@@ -29,6 +29,7 @@ class UserApiTests(TestCase):
         )
         self.assertEqual(register_resp.status_code, 201)
         self.assertIn("sessionid", register_resp.cookies)
+        self.assertIn("token", register_resp.json())
 
         me_resp = self.client.get("/api/auth/me")
         self.assertEqual(me_resp.status_code, 200)

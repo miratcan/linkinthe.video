@@ -5,14 +5,33 @@ from __future__ import annotations
 from typing import Optional
 
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from ninja import Router, Schema
+from ninja.security import HttpBearer
+from ninja.errors import HttpError
 
 from .models import Market, Product, ProductMarket, Video, VideoProduct, VideoProductSource, VideoStatus
 
-router = Router(tags=["videos"])
+
+class BearerAuth(HttpBearer):
+    def authenticate(self, request, token):
+        user = User.objects.filter(api_token=token).first()
+        return user
+
+
+router = Router(tags=["videos"], auth=BearerAuth())
 User = get_user_model()
 
+def _extract_amazon_asin(url: str) -> str | None:
+    """Naive ASIN extractor from Amazon URLs."""
+    parts = url.split("/")
+    for idx, part in enumerate(parts):
+        if part in {"dp", "product"} and idx + 1 < len(parts):
+            candidate = parts[idx + 1]
+            if len(candidate) >= 10:
+                return candidate[:10]
+    return None
 
 class VideoSchema(Schema):
     id: int
@@ -27,6 +46,7 @@ class VideoCreateSchema(Schema):
     youtube_url: str
     slug: str
     status: Optional[str] = None
+    title: Optional[str] = None
 
 
 class VideoUpdateSchema(Schema):
@@ -34,6 +54,7 @@ class VideoUpdateSchema(Schema):
     youtube_url: Optional[str] = None
     slug: Optional[str] = None
     status: Optional[str] = None
+    title: Optional[str] = None
 
 
 class ProductSchema(Schema):
@@ -81,7 +102,7 @@ class VideoProductSchema(Schema):
 
 
 class VideoProductCreateSchema(Schema):
-    video_id: int
+    video_id: Optional[int] = None
     product_id: Optional[int] = None
     name: Optional[str] = ""
     timestamp: Optional[str] = ""
@@ -89,6 +110,7 @@ class VideoProductCreateSchema(Schema):
     is_reviewed: Optional[bool] = False
     is_found: Optional[bool] = True
     sort_order: Optional[int] = 0
+    amazon_url: Optional[str] = None
 
 
 class VideoProductUpdateSchema(Schema):
@@ -100,48 +122,67 @@ class VideoProductUpdateSchema(Schema):
     is_reviewed: Optional[bool] = None
     is_found: Optional[bool] = None
     sort_order: Optional[int] = None
+    amazon_url: Optional[str] = None
 
 
 @router.get("videos/", response=list[VideoSchema])
 def list_videos(request):
-    return Video.objects.all().order_by("id")
+    if not request.auth:
+        return 401, {"detail": "Authentication required"}
+    return Video.objects.filter(user=request.auth).order_by("-id")
 
 
-@router.post("videos/", response={201: VideoSchema})
+@router.post("videos/", response={201: VideoSchema, 401: dict, 402: dict, 403: dict})
 def create_video(request, payload: VideoCreateSchema):
+    if not request.auth:
+        return 401, {"detail": "Authentication required"}
+    if request.auth.credits <= 0:
+        return 402, {"detail": "Insufficient credits"}
     user = get_object_or_404(User, pk=payload.user_id)
+    if user != request.auth:
+        return 403, {"detail": "Cannot create videos for other users"}
     video = Video.objects.create(
         user=user,
         youtube_url=payload.youtube_url,
         slug=payload.slug,
         status=payload.status or Video._meta.get_field("status").default,
     )
+    request.auth.credits -= 1
+    request.auth.save(update_fields=["credits"])
     return 201, video
 
 
 @router.get("videos/{video_id}/", response=VideoSchema)
 def get_video(request, video_id: int):
-    return get_object_or_404(Video, pk=video_id)
+    if not request.auth:
+        return 401, {"detail": "Authentication required"}
+    return get_object_or_404(Video, pk=video_id, user=request.auth)
 
 
 @router.patch("videos/{video_id}/", response=VideoSchema)
 def update_video(request, video_id: int, payload: VideoUpdateSchema):
-    video = get_object_or_404(Video, pk=video_id)
-    if payload.user_id is not None:
-        video.user = get_object_or_404(User, pk=payload.user_id)
+    if not request.auth:
+        return 401, {"detail": "Authentication required"}
+    video = get_object_or_404(Video, pk=video_id, user=request.auth)
+    if payload.user_id is not None and payload.user_id != request.auth.id:
+        return 403, {"detail": "Cannot reassign video user"}
     if payload.youtube_url is not None:
         video.youtube_url = payload.youtube_url
     if payload.slug is not None:
         video.slug = payload.slug
     if payload.status is not None:
         video.status = payload.status
+    if payload.title is not None:
+        video.title = payload.title
     video.save()
     return video
 
 
 @router.delete("videos/{video_id}/", response={204: None})
 def delete_video(request, video_id: int):
-    video = get_object_or_404(Video, pk=video_id)
+    if not request.auth:
+        return 401, {"detail": "Authentication required"}
+    video = get_object_or_404(Video, pk=video_id, user=request.auth)
     video.delete()
     return 204, None
 
@@ -180,11 +221,15 @@ def delete_product(request, product_id: int):
 
 @router.get("product-markets/", response=list[ProductMarketSchema])
 def list_product_markets(request):
+    if not request.auth:
+        return 401, {"detail": "Authentication required"}
     return ProductMarket.objects.all().order_by("id")
 
 
 @router.post("product-markets/", response={201: ProductMarketSchema, 400: dict})
 def create_product_market(request, payload: ProductMarketCreateSchema):
+    if not request.auth:
+        return 401, {"detail": "Authentication required"}
     if payload.market not in Market.values:
         return 400, {"detail": "invalid market"}
     product = get_object_or_404(Product, pk=payload.product_id)
@@ -205,6 +250,8 @@ def get_product_market(request, product_market_id: int):
 def update_product_market(
     request, product_market_id: int, payload: ProductMarketUpdateSchema
 ):
+    if not request.auth:
+        return 401, {"detail": "Authentication required"}
     mapping = get_object_or_404(ProductMarket, pk=product_market_id)
     if payload.market is not None:
         if payload.market not in Market.values:
@@ -220,6 +267,8 @@ def update_product_market(
 
 @router.delete("product-markets/{product_market_id}/", response={204: None})
 def delete_product_market(request, product_market_id: int):
+    if not request.auth:
+        return 401, {"detail": "Authentication required"}
     mapping = get_object_or_404(ProductMarket, pk=product_market_id)
     mapping.delete()
     return 204, None
@@ -227,15 +276,30 @@ def delete_product_market(request, product_market_id: int):
 
 @router.get("video-products/", response=list[VideoProductSchema])
 def list_video_products(request):
-    return VideoProduct.objects.all().order_by("id")
+    if not request.auth:
+        return 401, {"detail": "Authentication required"}
+    return VideoProduct.objects.filter(video__user=request.auth).order_by("id")
 
 
 @router.post("video-products/", response={201: VideoProductSchema})
 def create_video_product(request, payload: VideoProductCreateSchema):
+    if not request.auth:
+        return 401, {"detail": "Authentication required"}
+    if not payload.video_id:
+        return 422, {"detail": "video_id is required"}
     video = get_object_or_404(Video, pk=payload.video_id)
+    if video.user != request.auth:
+        return 403, {"detail": "Cannot add products to another user's video"}
     product = None
     if payload.product_id is not None:
         product = get_object_or_404(Product, pk=payload.product_id)
+    elif payload.amazon_url:
+        asin = _extract_amazon_asin(payload.amazon_url)
+        product = Product.objects.create(name=payload.name or asin or "Manual product")
+        if asin:
+            ProductMarket.objects.get_or_create(
+                product=product, market=Market.AMAZON, market_product_id=asin
+            )
     video_product = VideoProduct.objects.create(
         video=video,
         product=product,
@@ -251,18 +315,32 @@ def create_video_product(request, payload: VideoProductCreateSchema):
 
 @router.get("video-products/{video_product_id}/", response=VideoProductSchema)
 def get_video_product(request, video_product_id: int):
-    return get_object_or_404(VideoProduct, pk=video_product_id)
+    if not request.auth:
+        return 401, {"detail": "Authentication required"}
+    return get_object_or_404(VideoProduct, pk=video_product_id, video__user=request.auth)
 
 
 @router.patch("video-products/{video_product_id}/", response=VideoProductSchema)
 def update_video_product(
     request, video_product_id: int, payload: VideoProductUpdateSchema
 ):
-    video_product = get_object_or_404(VideoProduct, pk=video_product_id)
+    if not request.auth:
+        return 401, {"detail": "Authentication required"}
+    video_product = get_object_or_404(VideoProduct, pk=video_product_id, video__user=request.auth)
     if payload.video_id is not None:
         video_product.video = get_object_or_404(Video, pk=payload.video_id)
     if payload.product_id is not None:
         video_product.product = get_object_or_404(Product, pk=payload.product_id)
+    if payload.amazon_url:
+        asin = _extract_amazon_asin(payload.amazon_url)
+        product = video_product.product or Product.objects.create(
+            name=payload.name or asin or "Manual product"
+        )
+        if asin:
+            ProductMarket.objects.get_or_create(
+                product=product, market=Market.AMAZON, market_product_id=asin
+            )
+        video_product.product = product
     if payload.name is not None:
         video_product.name = payload.name or video_product.name
     if payload.timestamp is not None:
@@ -281,6 +359,57 @@ def update_video_product(
 
 @router.delete("video-products/{video_product_id}/", response={204: None})
 def delete_video_product(request, video_product_id: int):
-    video_product = get_object_or_404(VideoProduct, pk=video_product_id)
+    if not request.auth:
+        return 401, {"detail": "Authentication required"}
+    video_product = get_object_or_404(VideoProduct, pk=video_product_id, video__user=request.auth)
     video_product.delete()
     return 204, None
+@router.get("videos/{video_id}/status", response=dict)
+def video_status(request, video_id: int):
+    if not request.auth:
+        return 401, {"detail": "Authentication required"}
+    video = get_object_or_404(Video, pk=video_id, user=request.auth)
+    return {"id": video.id, "status": video.status}
+
+
+@router.get("videos/{video_id}/products", response=list[VideoProductSchema])
+def video_products(request, video_id: int):
+    if not request.auth:
+        return 401, {"detail": "Authentication required"}
+    video = get_object_or_404(Video, pk=video_id, user=request.auth)
+    return list(video.video_products.all())
+
+
+@router.post("videos/{video_id}/products", response={201: VideoProductSchema})
+def video_products_create(request, video_id: int, payload: VideoProductCreateSchema):
+    payload.video_id = video_id
+    return create_video_product(request, payload)
+
+
+@router.patch("videos/{video_id}/products/{video_product_id}", response=VideoProductSchema)
+def video_products_update(
+    request, video_id: int, video_product_id: int, payload: VideoProductUpdateSchema
+):
+    payload.video_id = video_id
+    return update_video_product(request, video_product_id, payload)
+
+
+@router.delete("videos/{video_id}/products/{video_product_id}", response={204: None})
+def video_products_delete(request, video_id: int, video_product_id: int):
+    if not request.auth:
+        return 401, {"detail": "Authentication required"}
+    vp = get_object_or_404(
+        VideoProduct, pk=video_product_id, video__user=request.auth, video_id=video_id
+    )
+    vp.delete()
+    return 204, None
+
+
+@router.post("videos/{video_id}/publish", response=VideoSchema)
+def video_publish(request, video_id: int):
+    if not request.auth:
+        return 401, {"detail": "Authentication required"}
+    video = get_object_or_404(Video, pk=video_id, user=request.auth)
+    video.status = VideoStatus.COMPLETED
+    video.save(update_fields=["status"])
+    return video
