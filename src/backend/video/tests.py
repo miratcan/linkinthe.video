@@ -1,8 +1,18 @@
+import json
+
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError
 from django.test import TestCase
 
-from .models import Market, Product, ProductMarket, Video, VideoProduct, VideoProductSource, VideoStatus
+from .models import (
+    Market,
+    Product,
+    ProductMarket,
+    Video,
+    VideoProduct,
+    VideoProductSource,
+    VideoStatus,
+)
 
 
 class VideoModelTests(TestCase):
@@ -83,3 +93,91 @@ class VideoProductModelTests(TestCase):
         )
         self.assertIsNone(vp.product)
         self.assertEqual(vp.name, "Unknown cable")
+
+
+class VideoApiTests(TestCase):
+    def setUp(self) -> None:
+        self.user = get_user_model().objects.create_user(
+            username="creator", email="creator@example.com", password="testpass"
+        )
+
+    def _post(self, path: str, payload: dict) -> dict:
+        response = self.client.post(
+            path, data=json.dumps(payload), content_type="application/json"
+        )
+        self.assertLess(response.status_code, 500)
+        return {"status": response.status_code, "data": response.json() if response.content else {}}
+
+    def _patch(self, path: str, payload: dict) -> dict:
+        response = self.client.patch(
+            path, data=json.dumps(payload), content_type="application/json"
+        )
+        self.assertLess(response.status_code, 500)
+        return {"status": response.status_code, "data": response.json() if response.content else {}}
+
+    def test_video_crud_flow(self):
+        create_resp = self._post(
+            "/api/videos/",
+            {"user_id": self.user.id, "youtube_url": "https://youtu.be/api", "slug": "api-video"},
+        )
+        self.assertEqual(create_resp["status"], 201)
+        video_id = create_resp["data"]["id"]
+
+        list_resp = self.client.get("/api/videos/")
+        self.assertEqual(list_resp.status_code, 200)
+        self.assertGreaterEqual(len(list_resp.json()["results"]), 1)
+
+        update_resp = self._patch(
+            f"/api/videos/{video_id}/", {"status": VideoStatus.COMPLETED, "slug": "api-video"}
+        )
+        self.assertEqual(update_resp["data"]["status"], VideoStatus.COMPLETED)
+
+        delete_resp = self.client.delete(f"/api/videos/{video_id}/")
+        self.assertEqual(delete_resp.status_code, 204)
+
+    def test_product_and_market_crud_flow(self):
+        product_resp = self._post("/api/products/", {"name": "Camera"})
+        self.assertEqual(product_resp["status"], 201)
+        product_id = product_resp["data"]["id"]
+
+        market_resp = self._post(
+            "/api/product-markets/",
+            {
+                "product_id": product_id,
+                "market": Market.AMAZON,
+                "market_product_id": "B00TEST",
+            },
+        )
+        self.assertEqual(market_resp["status"], 201)
+        self.assertEqual(market_resp["data"]["market"], Market.AMAZON)
+
+    def test_video_product_crud_flow(self):
+        video_id = self._post(
+            "/api/videos/",
+            {
+                "user_id": self.user.id,
+                "youtube_url": "https://youtu.be/api2",
+                "slug": "api-video-2",
+            },
+        )["data"]["id"]
+        product_id = self._post("/api/products/", {"name": "Lens"})["data"]["id"]
+
+        vp_resp = self._post(
+            "/api/video-products/",
+            {
+                "video_id": video_id,
+                "product_id": product_id,
+                "name": "Prime lens",
+                "timestamp": "00:10",
+                "source": VideoProductSource.MANUAL,
+                "is_found": True,
+            },
+        )
+        self.assertEqual(vp_resp["status"], 201)
+        vp_id = vp_resp["data"]["id"]
+
+        patch_resp = self._patch(
+            f"/api/video-products/{vp_id}/", {"is_reviewed": True, "sort_order": 3}
+        )
+        self.assertTrue(patch_resp["data"]["is_reviewed"])
+        self.assertEqual(patch_resp["data"]["sort_order"], 3)
