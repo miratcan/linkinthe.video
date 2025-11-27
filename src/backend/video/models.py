@@ -41,6 +41,8 @@ class Product(models.Model):
 
 class Market(models.TextChoices):
     AMAZON = "amazon", "Amazon"
+    TRENDYOL = "trendyol", "Trendyol"
+    OTHER = "other", "Other"
 
 
 class ProductMarket(models.Model):
@@ -54,7 +56,7 @@ class ProductMarket(models.Model):
         unique_together = ("product", "market", "market_product_id")
 
     def __str__(self) -> str:
-        return f"{self.product} @ {self.market}"
+        return f"{self.product} @ {self.get_market_display()}"
 
 
 class VideoProductSource(models.TextChoices):
@@ -87,4 +89,3 @@ class VideoProduct(models.Model):
 
     def __str__(self) -> str:
         return self.name or (self.product.name if self.product else "Unnamed Product")
-

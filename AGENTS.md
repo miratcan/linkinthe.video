@@ -15,6 +15,7 @@
 ## Build, Test, and Development Commands
 - Backend dev server: `just run` or `cd src/backend && uv run python manage.py runserver 0.0.0.0:8000`.
 - Backend lint/type-check: `just check` to run Ruff lint + format checks and `mypy` with Django stubs.
+- Backend DB: `just migrate` applies migrations (SQLite default). Keep `.env` aligned with database engine.
 - Backend tests: `cd src/backend && uv run python manage.py test` (use `--pattern` to target files).
 - Frontend dev server: `just front` (after `npm install` in `src/frontend`) starts Next.js on port 3000; `just front-build` runs `next build`.
 

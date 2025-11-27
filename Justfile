@@ -14,6 +14,9 @@ check:
 run:
 	cd {{backend_dir}} && uv run python manage.py runserver 0.0.0.0:8000
 
+migrate:
+	cd {{backend_dir}} && uv run python manage.py migrate
+
 front:
 	cd {{frontend_dir}} && npm run dev -- --hostname 0.0.0.0 --port 3000
 
