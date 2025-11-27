@@ -1,285 +1,285 @@
-"""Lightweight JSON API endpoints for video-related models."""
+"""Video, product, and association APIs using Django Ninja (Shinobi)."""
 
 from __future__ import annotations
 
-import json
-from typing import Any
+from typing import Optional
 
 from django.contrib.auth import get_user_model
-from django.forms.models import model_to_dict
-from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
+from ninja import Router, Schema
 
-from .models import Market, Product, ProductMarket, Video, VideoProduct
+from .models import Market, Product, ProductMarket, Video, VideoProduct, VideoProductSource, VideoStatus
 
-
-def _parse_json(request: HttpRequest) -> dict[str, Any]:
-    if not request.body:
-        return {}
-    try:
-        return json.loads(request.body.decode())
-    except json.JSONDecodeError:
-        raise ValueError("Invalid JSON body")
+router = Router(tags=["videos"])
+User = get_user_model()
 
 
-def _json_error(message: str, status: int = 400) -> JsonResponse:
-    return JsonResponse({"error": message}, status=status)
+class VideoSchema(Schema):
+    id: int
+    user_id: int
+    youtube_url: str
+    status: str
+    slug: str
 
 
-def _serialize_video(video: Video) -> dict[str, Any]:
-    return {
-        "id": video.id,
-        "user_id": video.user_id,
-        "youtube_url": video.youtube_url,
-        "status": video.status,
-        "slug": video.slug,
-    }
+class VideoCreateSchema(Schema):
+    user_id: int
+    youtube_url: str
+    slug: str
+    status: Optional[str] = None
 
 
-def _serialize_product(product: Product) -> dict[str, Any]:
-    return {"id": product.id, "name": product.name}
+class VideoUpdateSchema(Schema):
+    user_id: Optional[int] = None
+    youtube_url: Optional[str] = None
+    slug: Optional[str] = None
+    status: Optional[str] = None
 
 
-def _serialize_product_market(product_market: ProductMarket) -> dict[str, Any]:
-    return {
-        "id": product_market.id,
-        "product_id": product_market.product_id,
-        "market": product_market.market,
-        "market_product_id": product_market.market_product_id,
-    }
+class ProductSchema(Schema):
+    id: int
+    name: str
 
 
-def _serialize_video_product(video_product: VideoProduct) -> dict[str, Any]:
-    return {
-        "id": video_product.id,
-        "video_id": video_product.video_id,
-        "product_id": video_product.product_id,
-        "name": video_product.name,
-        "timestamp": video_product.timestamp,
-        "source": video_product.source,
-        "is_reviewed": video_product.is_reviewed,
-        "is_found": video_product.is_found,
-        "sort_order": video_product.sort_order,
-    }
+class ProductCreateSchema(Schema):
+    name: str
 
 
-@csrf_exempt
-@require_http_methods(["GET", "POST"])
-def videos(request: HttpRequest) -> HttpResponse:
-    if request.method == "GET":
-        data = [_serialize_video(v) for v in Video.objects.all().order_by("id")]
-        return JsonResponse({"results": data})
+class ProductUpdateSchema(Schema):
+    name: Optional[str] = None
 
-    try:
-        body = _parse_json(request)
-    except ValueError as exc:
-        return _json_error(str(exc))
 
-    user_id = body.get("user_id")
-    youtube_url = body.get("youtube_url")
-    slug = body.get("slug")
-    if not all([user_id, youtube_url, slug]):
-        return _json_error("user_id, youtube_url, and slug are required")
-    user = get_object_or_404(get_user_model(), pk=user_id)
+class ProductMarketSchema(Schema):
+    id: int
+    product_id: int
+    market: str
+    market_product_id: str
+
+
+class ProductMarketCreateSchema(Schema):
+    product_id: int
+    market: str
+    market_product_id: str
+
+
+class ProductMarketUpdateSchema(Schema):
+    product_id: Optional[int] = None
+    market: Optional[str] = None
+    market_product_id: Optional[str] = None
+
+
+class VideoProductSchema(Schema):
+    id: int
+    video_id: int
+    product_id: Optional[int] = None
+    name: str
+    timestamp: str
+    source: str
+    is_reviewed: bool
+    is_found: bool
+    sort_order: int
+
+
+class VideoProductCreateSchema(Schema):
+    video_id: int
+    product_id: Optional[int] = None
+    name: Optional[str] = ""
+    timestamp: Optional[str] = ""
+    source: str
+    is_reviewed: Optional[bool] = False
+    is_found: Optional[bool] = True
+    sort_order: Optional[int] = 0
+
+
+class VideoProductUpdateSchema(Schema):
+    video_id: Optional[int] = None
+    product_id: Optional[int] = None
+    name: Optional[str] = None
+    timestamp: Optional[str] = None
+    source: Optional[str] = None
+    is_reviewed: Optional[bool] = None
+    is_found: Optional[bool] = None
+    sort_order: Optional[int] = None
+
+
+@router.get("videos/", response=list[VideoSchema])
+def list_videos(request):
+    return Video.objects.all().order_by("id")
+
+
+@router.post("videos/", response={201: VideoSchema})
+def create_video(request, payload: VideoCreateSchema):
+    user = get_object_or_404(User, pk=payload.user_id)
     video = Video.objects.create(
         user=user,
-        youtube_url=youtube_url,
-        slug=slug,
-        status=body.get("status") or Video._meta.get_field("status").default,
+        youtube_url=payload.youtube_url,
+        slug=payload.slug,
+        status=payload.status or Video._meta.get_field("status").default,
     )
-    return JsonResponse(_serialize_video(video), status=201)
+    return 201, video
 
 
-@csrf_exempt
-@require_http_methods(["GET", "PUT", "PATCH", "DELETE"])
-def video_detail(request: HttpRequest, video_id: int) -> HttpResponse:
+@router.get("videos/{video_id}/", response=VideoSchema)
+def get_video(request, video_id: int):
+    return get_object_or_404(Video, pk=video_id)
+
+
+@router.patch("videos/{video_id}/", response=VideoSchema)
+def update_video(request, video_id: int, payload: VideoUpdateSchema):
     video = get_object_or_404(Video, pk=video_id)
-    if request.method == "GET":
-        return JsonResponse(_serialize_video(video))
-    if request.method == "DELETE":
-        video.delete()
-        return HttpResponse(status=204)
-
-    try:
-        body = _parse_json(request)
-    except ValueError as exc:
-        return _json_error(str(exc))
-
-    if "youtube_url" in body:
-        video.youtube_url = body["youtube_url"]
-    if "status" in body:
-        video.status = body["status"]
-    if "slug" in body:
-        video.slug = body["slug"]
-    if "user_id" in body:
-        user = get_object_or_404(get_user_model(), pk=body["user_id"])
-        video.user = user
+    if payload.user_id is not None:
+        video.user = get_object_or_404(User, pk=payload.user_id)
+    if payload.youtube_url is not None:
+        video.youtube_url = payload.youtube_url
+    if payload.slug is not None:
+        video.slug = payload.slug
+    if payload.status is not None:
+        video.status = payload.status
     video.save()
-    return JsonResponse(_serialize_video(video))
+    return video
 
 
-@csrf_exempt
-@require_http_methods(["GET", "POST"])
-def products(request: HttpRequest) -> HttpResponse:
-    if request.method == "GET":
-        data = [_serialize_product(p) for p in Product.objects.all().order_by("id")]
-        return JsonResponse({"results": data})
-
-    try:
-        body = _parse_json(request)
-    except ValueError as exc:
-        return _json_error(str(exc))
-
-    name = body.get("name")
-    if not name:
-        return _json_error("name is required")
-    product = Product.objects.create(name=name)
-    return JsonResponse(_serialize_product(product), status=201)
-
-
-@csrf_exempt
-@require_http_methods(["GET", "PUT", "PATCH", "DELETE"])
-def product_detail(request: HttpRequest, product_id: int) -> HttpResponse:
-    product = get_object_or_404(Product, pk=product_id)
-    if request.method == "GET":
-        return JsonResponse(_serialize_product(product))
-    if request.method == "DELETE":
-        product.delete()
-        return HttpResponse(status=204)
-
-    try:
-        body = _parse_json(request)
-    except ValueError as exc:
-        return _json_error(str(exc))
-
-    if "name" in body:
-        product.name = body["name"]
-    product.save()
-    return JsonResponse(_serialize_product(product))
-
-
-@csrf_exempt
-@require_http_methods(["GET", "POST"])
-def product_markets(request: HttpRequest) -> HttpResponse:
-    if request.method == "GET":
-        data = [_serialize_product_market(pm) for pm in ProductMarket.objects.all().order_by("id")]
-        return JsonResponse({"results": data})
-
-    try:
-        body = _parse_json(request)
-    except ValueError as exc:
-        return _json_error(str(exc))
-
-    product_id = body.get("product_id")
-    market = body.get("market")
-    market_product_id = body.get("market_product_id")
-    if not all([product_id, market, market_product_id]):
-        return _json_error("product_id, market, and market_product_id are required")
-    if market not in Market.values:
-        return _json_error("invalid market")
-    product = get_object_or_404(Product, pk=product_id)
-    product_market = ProductMarket.objects.create(
-        product=product, market=market, market_product_id=market_product_id
-    )
-    return JsonResponse(_serialize_product_market(product_market), status=201)
-
-
-@csrf_exempt
-@require_http_methods(["GET", "PUT", "PATCH", "DELETE"])
-def product_market_detail(request: HttpRequest, product_market_id: int) -> HttpResponse:
-    product_market = get_object_or_404(ProductMarket, pk=product_market_id)
-    if request.method == "GET":
-        return JsonResponse(_serialize_product_market(product_market))
-    if request.method == "DELETE":
-        product_market.delete()
-        return HttpResponse(status=204)
-
-    try:
-        body = _parse_json(request)
-    except ValueError as exc:
-        return _json_error(str(exc))
-
-    if "market" in body:
-        if body["market"] not in Market.values:
-            return _json_error("invalid market")
-        product_market.market = body["market"]
-    if "market_product_id" in body:
-        product_market.market_product_id = body["market_product_id"]
-    if "product_id" in body:
-        product_market.product = get_object_or_404(Product, pk=body["product_id"])
-    product_market.save()
-    return JsonResponse(_serialize_product_market(product_market))
-
-
-@csrf_exempt
-@require_http_methods(["GET", "POST"])
-def video_products(request: HttpRequest) -> HttpResponse:
-    if request.method == "GET":
-        data = [_serialize_video_product(vp) for vp in VideoProduct.objects.all().order_by("id")]
-        return JsonResponse({"results": data})
-
-    try:
-        body = _parse_json(request)
-    except ValueError as exc:
-        return _json_error(str(exc))
-
-    video_id = body.get("video_id")
-    source = body.get("source")
-    if not all([video_id, source]):
-        return _json_error("video_id and source are required")
+@router.delete("videos/{video_id}/", response={204: None})
+def delete_video(request, video_id: int):
     video = get_object_or_404(Video, pk=video_id)
-    product = None
-    if body.get("product_id"):
-        product = get_object_or_404(Product, pk=body["product_id"])
+    video.delete()
+    return 204, None
 
+
+@router.get("products/", response=list[ProductSchema])
+def list_products(request):
+    return Product.objects.all().order_by("id")
+
+
+@router.post("products/", response={201: ProductSchema})
+def create_product(request, payload: ProductCreateSchema):
+    product = Product.objects.create(name=payload.name)
+    return 201, product
+
+
+@router.get("products/{product_id}/", response=ProductSchema)
+def get_product(request, product_id: int):
+    return get_object_or_404(Product, pk=product_id)
+
+
+@router.patch("products/{product_id}/", response=ProductSchema)
+def update_product(request, product_id: int, payload: ProductUpdateSchema):
+    product = get_object_or_404(Product, pk=product_id)
+    if payload.name is not None:
+        product.name = payload.name
+    product.save()
+    return product
+
+
+@router.delete("products/{product_id}/", response={204: None})
+def delete_product(request, product_id: int):
+    product = get_object_or_404(Product, pk=product_id)
+    product.delete()
+    return 204, None
+
+
+@router.get("product-markets/", response=list[ProductMarketSchema])
+def list_product_markets(request):
+    return ProductMarket.objects.all().order_by("id")
+
+
+@router.post("product-markets/", response={201: ProductMarketSchema, 400: dict})
+def create_product_market(request, payload: ProductMarketCreateSchema):
+    if payload.market not in Market.values:
+        return 400, {"detail": "invalid market"}
+    product = get_object_or_404(Product, pk=payload.product_id)
+    mapping = ProductMarket.objects.create(
+        product=product,
+        market=payload.market,
+        market_product_id=payload.market_product_id,
+    )
+    return 201, mapping
+
+
+@router.get("product-markets/{product_market_id}/", response=ProductMarketSchema)
+def get_product_market(request, product_market_id: int):
+    return get_object_or_404(ProductMarket, pk=product_market_id)
+
+
+@router.patch("product-markets/{product_market_id}/", response=ProductMarketSchema)
+def update_product_market(
+    request, product_market_id: int, payload: ProductMarketUpdateSchema
+):
+    mapping = get_object_or_404(ProductMarket, pk=product_market_id)
+    if payload.market is not None:
+        if payload.market not in Market.values:
+            return 400, {"detail": "invalid market"}
+        mapping.market = payload.market
+    if payload.market_product_id is not None:
+        mapping.market_product_id = payload.market_product_id
+    if payload.product_id is not None:
+        mapping.product = get_object_or_404(Product, pk=payload.product_id)
+    mapping.save()
+    return mapping
+
+
+@router.delete("product-markets/{product_market_id}/", response={204: None})
+def delete_product_market(request, product_market_id: int):
+    mapping = get_object_or_404(ProductMarket, pk=product_market_id)
+    mapping.delete()
+    return 204, None
+
+
+@router.get("video-products/", response=list[VideoProductSchema])
+def list_video_products(request):
+    return VideoProduct.objects.all().order_by("id")
+
+
+@router.post("video-products/", response={201: VideoProductSchema})
+def create_video_product(request, payload: VideoProductCreateSchema):
+    video = get_object_or_404(Video, pk=payload.video_id)
+    product = None
+    if payload.product_id is not None:
+        product = get_object_or_404(Product, pk=payload.product_id)
     video_product = VideoProduct.objects.create(
         video=video,
         product=product,
-        name=body.get("name") or "",
-        timestamp=body.get("timestamp") or "",
-        source=source,
-        is_reviewed=body.get("is_reviewed", False),
-        is_found=body.get("is_found", True),
-        sort_order=body.get("sort_order", 0),
+        name=payload.name or "",
+        timestamp=payload.timestamp or "",
+        source=payload.source,
+        is_reviewed=payload.is_reviewed or False,
+        is_found=payload.is_found if payload.is_found is not None else True,
+        sort_order=payload.sort_order or 0,
     )
-    return JsonResponse(_serialize_video_product(video_product), status=201)
+    return 201, video_product
 
 
-@csrf_exempt
-@require_http_methods(["GET", "PUT", "PATCH", "DELETE"])
-def video_product_detail(request: HttpRequest, video_product_id: int) -> HttpResponse:
+@router.get("video-products/{video_product_id}/", response=VideoProductSchema)
+def get_video_product(request, video_product_id: int):
+    return get_object_or_404(VideoProduct, pk=video_product_id)
+
+
+@router.patch("video-products/{video_product_id}/", response=VideoProductSchema)
+def update_video_product(
+    request, video_product_id: int, payload: VideoProductUpdateSchema
+):
     video_product = get_object_or_404(VideoProduct, pk=video_product_id)
-    if request.method == "GET":
-        return JsonResponse(_serialize_video_product(video_product))
-    if request.method == "DELETE":
-        video_product.delete()
-        return HttpResponse(status=204)
-
-    try:
-        body = _parse_json(request)
-    except ValueError as exc:
-        return _json_error(str(exc))
-
-    if "name" in body:
-        video_product.name = body["name"]
-    if "timestamp" in body:
-        video_product.timestamp = body["timestamp"]
-    if "source" in body:
-        video_product.source = body["source"]
-    if "is_reviewed" in body:
-        video_product.is_reviewed = bool(body["is_reviewed"])
-    if "is_found" in body:
-        video_product.is_found = bool(body["is_found"])
-    if "sort_order" in body:
-        video_product.sort_order = body["sort_order"]
-    if "video_id" in body:
-        video_product.video = get_object_or_404(Video, pk=body["video_id"])
-    if "product_id" in body:
-        if body["product_id"] is None:
-            video_product.product = None
-        else:
-            video_product.product = get_object_or_404(Product, pk=body["product_id"])
+    if payload.video_id is not None:
+        video_product.video = get_object_or_404(Video, pk=payload.video_id)
+    if payload.product_id is not None:
+        video_product.product = get_object_or_404(Product, pk=payload.product_id)
+    video_product.name = payload.name or video_product.name
+    if payload.timestamp is not None:
+        video_product.timestamp = payload.timestamp
+    if payload.source is not None:
+        video_product.source = payload.source
+    if payload.is_reviewed is not None:
+        video_product.is_reviewed = payload.is_reviewed
+    if payload.is_found is not None:
+        video_product.is_found = payload.is_found
+    if payload.sort_order is not None:
+        video_product.sort_order = payload.sort_order
     video_product.save()
-    return JsonResponse(_serialize_video_product(video_product))
+    return video_product
+
+
+@router.delete("video-products/{video_product_id}/", response={204: None})
+def delete_video_product(request, video_product_id: int):
+    video_product = get_object_or_404(VideoProduct, pk=video_product_id)
+    video_product.delete()
+    return 204, None

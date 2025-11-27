@@ -125,7 +125,9 @@ class VideoApiTests(TestCase):
 
         list_resp = self.client.get("/api/videos/")
         self.assertEqual(list_resp.status_code, 200)
-        self.assertGreaterEqual(len(list_resp.json()["results"]), 1)
+        payload = list_resp.json()
+        items = payload["results"] if isinstance(payload, dict) and "results" in payload else payload
+        self.assertGreaterEqual(len(items), 1)
 
         update_resp = self._patch(
             f"/api/videos/{video_id}/", {"status": VideoStatus.COMPLETED, "slug": "api-video"}
@@ -181,3 +183,13 @@ class VideoApiTests(TestCase):
         )
         self.assertTrue(patch_resp["data"]["is_reviewed"])
         self.assertEqual(patch_resp["data"]["sort_order"], 3)
+
+
+class ApiDocsTests(TestCase):
+    def test_api_docs_endpoint(self):
+        response = self.client.get("/api/openapi.json")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("paths", payload)
+        self.assertTrue(any(path.startswith("/api/users/") for path in payload["paths"]))
+        self.assertTrue(any(path.startswith("/api/videos/") for path in payload["paths"]))

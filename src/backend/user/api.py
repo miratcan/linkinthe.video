@@ -1,90 +1,80 @@
-"""Lightweight JSON API endpoints for user operations."""
+"""User API router using Django Ninja (Shinobi)."""
 
 from __future__ import annotations
 
-import json
-from typing import Any
+from typing import Optional
 
 from django.contrib.auth import get_user_model
-from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils.crypto import get_random_string
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
-
+from ninja import Router, Schema
 
 User = get_user_model()
+router = Router(tags=["users"])
 
 
-def _parse_json(request: HttpRequest) -> dict[str, Any]:
-    if not request.body:
-        return {}
-    try:
-        return json.loads(request.body.decode())
-    except json.JSONDecodeError:
-        raise ValueError("Invalid JSON body")
+class UserSchema(Schema):
+    id: int
+    username: str
+    email: Optional[str] = None
+    credits: int
 
 
-def _json_error(message: str, status: int = 400) -> JsonResponse:
-    return JsonResponse({"error": message}, status=status)
+class UserCreateSchema(Schema):
+    username: str
+    email: str
+    password: Optional[str] = None
+    credits: Optional[int] = 0
 
 
-def _serialize_user(user: User) -> dict[str, Any]:
-    return {
-        "id": user.id,
-        "username": user.username,
-        "email": user.email,
-        "credits": user.credits,
-    }
+class UserUpdateSchema(Schema):
+    username: Optional[str] = None
+    email: Optional[str] = None
+    password: Optional[str] = None
+    credits: Optional[int] = None
 
 
-@csrf_exempt
-@require_http_methods(["GET", "POST"])
-def users(request: HttpRequest) -> HttpResponse:
-    if request.method == "GET":
-        data = [_serialize_user(u) for u in User.objects.all().order_by("id")]
-        return JsonResponse({"results": data})
+@router.get("users/", response=list[UserSchema])
+def list_users(request):
+    return User.objects.all().order_by("id")
 
-    try:
-        body = _parse_json(request)
-    except ValueError as exc:
-        return _json_error(str(exc))
 
-    username = body.get("username")
-    email = body.get("email")
-    password = body.get("password") or get_random_string(12)
-    if not all([username, email]):
-        return _json_error("username and email are required")
-
-    user = User.objects.create_user(username=username, email=email, password=password)
-    if "credits" in body:
-        user.credits = body["credits"]
+@router.post("users/", response={201: UserSchema})
+def create_user(request, payload: UserCreateSchema):
+    password = payload.password or get_random_string(12)
+    user = User.objects.create_user(
+        username=payload.username,
+        email=payload.email,
+        password=password,
+    )
+    if payload.credits is not None:
+        user.credits = payload.credits
         user.save()
-    return JsonResponse(_serialize_user(user), status=201)
+    return 201, user
 
 
-@csrf_exempt
-@require_http_methods(["GET", "PUT", "PATCH", "DELETE"])
-def user_detail(request: HttpRequest, user_id: int) -> HttpResponse:
+@router.get("users/{user_id}/", response=UserSchema)
+def get_user(request, user_id: int):
+    return get_object_or_404(User, pk=user_id)
+
+
+@router.patch("users/{user_id}/", response=UserSchema)
+def update_user(request, user_id: int, payload: UserUpdateSchema):
     user = get_object_or_404(User, pk=user_id)
-    if request.method == "GET":
-        return JsonResponse(_serialize_user(user))
-    if request.method == "DELETE":
-        user.delete()
-        return HttpResponse(status=204)
-
-    try:
-        body = _parse_json(request)
-    except ValueError as exc:
-        return _json_error(str(exc))
-
-    if "username" in body:
-        user.username = body["username"]
-    if "email" in body:
-        user.email = body["email"]
-    if "credits" in body:
-        user.credits = body["credits"]
-    if "password" in body and body["password"]:
-        user.set_password(body["password"])
+    if payload.username is not None:
+        user.username = payload.username
+    if payload.email is not None:
+        user.email = payload.email
+    if payload.credits is not None:
+        user.credits = payload.credits
+    if payload.password:
+        user.set_password(payload.password)
     user.save()
-    return JsonResponse(_serialize_user(user))
+    return user
+
+
+@router.delete("users/{user_id}/", response={204: None})
+def delete_user(request, user_id: int):
+    user = get_object_or_404(User, pk=user_id)
+    user.delete()
+    return 204, None
