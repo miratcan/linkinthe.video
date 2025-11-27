@@ -9,3 +9,14 @@ __pycache__/
 ruff_cache/
 .mypy_cache/
 pyproject.lock
+node_modules/
+.next/
+.turbo/
+.vercel/
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+.env.local
+.env.development.local
+.env.production.local
+.env.test.local
