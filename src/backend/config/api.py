@@ -7,7 +7,7 @@ from ninja import NinjaAPI
 from user.api import router as user_router
 from video.api import router as video_router
 
-api = NinjaAPI(title="linkinthe.video API", version="0.1.0")
+api = NinjaAPI(title="linkinthe.video API", version="0.1.0", csrf=False)
 
 # Routers register their own subpaths (e.g., users/, videos/, products/...)
 api.add_router("/", user_router)

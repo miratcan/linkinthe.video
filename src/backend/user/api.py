@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Optional
 
-from django.contrib.auth import get_user_model
+from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.shortcuts import get_object_or_404
 from django.utils.crypto import get_random_string
+from django.urls import reverse
 from ninja import Router, Schema
 
 User = get_user_model()
@@ -32,6 +33,22 @@ class UserUpdateSchema(Schema):
     email: Optional[str] = None
     password: Optional[str] = None
     credits: Optional[int] = None
+
+
+class AuthRegisterSchema(Schema):
+    email: str
+    password: str
+    username: Optional[str] = None
+
+
+class AuthLoginSchema(Schema):
+    email: str
+    password: str
+
+
+class AuthResponseSchema(Schema):
+    user: UserSchema
+    session: Optional[str] = None
 
 
 @router.get("users/", response=list[UserSchema])
@@ -78,3 +95,42 @@ def delete_user(request, user_id: int):
     user = get_object_or_404(User, pk=user_id)
     user.delete()
     return 204, None
+
+
+@router.post("auth/register", response={201: AuthResponseSchema})
+def register(request, payload: AuthRegisterSchema):
+    username = payload.username or payload.email.split("@")[0]
+    user = User.objects.create_user(username=username, email=payload.email, password=payload.password)
+    login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+    return 201, {"user": user, "session": request.session.session_key}
+
+
+@router.post("auth/login", response=AuthResponseSchema)
+def auth_login(request, payload: AuthLoginSchema):
+    user = User.objects.filter(email__iexact=payload.email).first()
+    username = user.username if user else payload.email
+    user = authenticate(request, username=username, password=payload.password)
+    if not user:
+        return 401, {"detail": "Invalid credentials"}
+    login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+    return {"user": user, "session": request.session.session_key}
+
+
+@router.post("auth/logout", response={204: None})
+def auth_logout(request):
+    logout(request)
+    return 204, None
+
+
+@router.get("auth/me", response={200: AuthResponseSchema, 401: dict})
+def auth_me(request):
+    if not request.user.is_authenticated:
+        return 401, {"detail": "Not authenticated"}
+    return {"user": request.user, "session": request.session.session_key}
+
+
+@router.post("auth/google", response=dict)
+def auth_google(request):
+    """Return Google OAuth start URL (callback handled by allauth at /accounts/google/login/)."""
+    auth_url = request.build_absolute_uri(reverse("socialaccount_login", args=["google"]))
+    return {"authorization_url": auth_url}

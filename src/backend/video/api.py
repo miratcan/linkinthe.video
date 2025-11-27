@@ -263,7 +263,8 @@ def update_video_product(
         video_product.video = get_object_or_404(Video, pk=payload.video_id)
     if payload.product_id is not None:
         video_product.product = get_object_or_404(Product, pk=payload.product_id)
-    video_product.name = payload.name or video_product.name
+    if payload.name is not None:
+        video_product.name = payload.name or video_product.name
     if payload.timestamp is not None:
         video_product.timestamp = payload.timestamp
     if payload.source is not None:
