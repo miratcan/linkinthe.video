@@ -1,4 +1,4 @@
-"""Admin registrations for account models."""
+"""Admin registrations for user models."""
 
 from __future__ import annotations
 

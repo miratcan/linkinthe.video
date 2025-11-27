@@ -101,7 +101,7 @@ class Migration(migrations.Migration):
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
                         related_name="video_products",
-                        to="videos.product",
+                        to="video.product",
                     ),
                 ),
                 (
@@ -109,7 +109,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="video_products",
-                        to="videos.video",
+                        to="video.video",
                     ),
                 ),
             ],
@@ -139,7 +139,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="markets",
-                        to="videos.product",
+                        to="video.product",
                     ),
                 ),
             ],
