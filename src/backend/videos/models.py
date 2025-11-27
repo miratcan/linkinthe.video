@@ -2,17 +2,8 @@
 
 from __future__ import annotations
 
-from django.contrib.auth.models import AbstractUser
+from django.conf import settings
 from django.db import models
-
-
-class User(AbstractUser):
-    """Custom user with credit balance."""
-
-    credits = models.PositiveIntegerField(default=0)
-
-    def __str__(self) -> str:
-        return self.email or self.username
 
 
 class VideoStatus(models.TextChoices):
@@ -24,7 +15,9 @@ class VideoStatus(models.TextChoices):
 class Video(models.Model):
     """Represents a processed or processing video."""
 
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="videos")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="videos"
+    )
     youtube_url = models.URLField()
     status = models.CharField(
         max_length=20,
@@ -48,7 +41,6 @@ class Product(models.Model):
 
 class Market(models.TextChoices):
     AMAZON = "amazon", "Amazon"
-    TRENDYOL = "trendyol", "Trendyol"
 
 
 class ProductMarket(models.Model):
