@@ -253,15 +253,74 @@ class MockLLMProvider(LLMProvider):
 
 ---
 
+## Python Tooling
+
+| Araç | Ne İçin |
+|------|---------|
+| **uv** | Dependency management (pip yerine, çok hızlı) |
+| **pyproject.toml** | Tek config dosyası (requirements.txt yok) |
+| **ruff** | Linter + formatter (flake8/black yerine) |
+| **mypy** | Type checker (strict mode) |
+
+### Code Style
+
+- **Line length:** 79 karakter (PEP8 klasik)
+- **Quotes:** Double quotes
+- **Type hints:** Zorunlu (mypy strict)
+
+### pyproject.toml Yapısı
+
+```toml
+[project]
+name = "linkinthe-backend"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "django>=5.0",
+    "django-shinobi",
+    "django-allauth",
+    "django-anymail",
+    "django-environ",
+    "litellm",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest",
+    "pytest-django",
+    "factory-boy",
+    "pytest-recording",
+    "ruff",
+    "mypy",
+]
+
+[tool.ruff]
+line-length = 79
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+```
+
+---
+
 ## Development Workflow
 
 ```bash
 # Backend
 cd src/backend
-python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-python manage.py migrate
-python manage.py runserver
+uv sync                      # Install dependencies
+uv run python manage.py migrate
+uv run python manage.py runserver
+
+# Linting & Type Check
+uv run ruff check .
+uv run ruff format .
+uv run mypy .
 
 # Frontend
 cd src/frontend
