@@ -1,0 +1,36 @@
+Bu bir YouTube videosunun transkript parçası. Videoda bahsedilen ürünleri bul.
+
+== FOUND (SADECE marka/model varsa) ==
+FOUND'a koymak için MARKA ŞART:
+✓ "Logitech G Pro X" → FOUND (marka + model var)
+✓ "Nintendo Switch" → FOUND (marka + ürün adı var)
+✓ "iPad 8th generation" → FOUND (marka + nesil var)
+✓ "Funko Pop Yoda" → FOUND (marka + karakter var)
+
+== LOST (marka/model YOK) ==
+Marka yoksa LOST'a koy, istisnasız:
+✗ "gaming mouse" → LOST (hangi marka?)
+✗ "tripod" → LOST (hangi tripod?)
+✗ "headset" → LOST (marka yok)
+✗ "wireless earbuds" → LOST (model yok)
+✗ "stress ball" → LOST (marka yok)
+✗ "water bottle" → LOST (marka yok)
+
+== HİÇ EKLEME ==
+- Fiyatlar: $100, "150 dollar item"
+- Yerler: Japan, Tokyo, Amazon
+- Kutular: box, mystery box, returns box
+- Soyut kavramlar: disadvantage, stumbling block
+- Servisler: YouTube, Underdog
+
+KURAL: Marka yoksa → LOST. İstisna yok.
+
+JSON:
+{{"found": [{{"name": "...", "category": "...", "timestamp": "..."}}], "lost": [...]}}
+
+Transkript:
+---
+{transcript_chunk}
+---
+
+SADECE JSON dön.
