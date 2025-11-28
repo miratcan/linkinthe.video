@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
-from django.conf import settings
 from django.db import transaction
-from django.utils import timezone
 
 from pipeline.adapters import MockProvider, OpenAIProvider
 from pipeline.steps import PipelineResult, run_analysis
-from video.models import Market, Product, ProductMarket, Video, VideoProduct, VideoProductSource, VideoStatus
+from video.models import (
+    Market,
+    Product,
+    ProductMarket,
+    Video,
+    VideoProduct,
+    VideoProductSource,
+    VideoStatus,
+)
 
 
 def trigger_analysis(video_id: int, use_mock: bool = True) -> Dict[str, Any]:

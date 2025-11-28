@@ -6,8 +6,8 @@ from typing import Optional
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.shortcuts import get_object_or_404
-from django.utils.crypto import get_random_string
 from django.urls import reverse
+from django.utils.crypto import get_random_string
 from ninja import Router, Schema
 
 User = get_user_model()

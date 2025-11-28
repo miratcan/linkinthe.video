@@ -5,6 +5,7 @@
 - `src/backend/user` and `src/backend/video`: Domain apps for authentication/user data and video features. Add new models, views, and admin registrations here.
 - `src/frontend`: Next.js 14 app router UI with Tailwind/shadcn/ui. Use `app/` for routes/layouts, `components/ui` for reusable pieces, and `lib/` for helpers.
 - `business/`: Product, brand, and research notes; keep aligned when implementing features but avoid shipping changes here unless requested.
+- Key briefs: `business/techbrief.md` (tech stack/pipeline), `business/brief.md` (product scope), `business/personas.md`, and `business/designguide.md` (visual direction).
 - Backend dependency metadata lives in `src/backend/pyproject.toml` with the lockfile at `src/backend/uv.lock`.
 
 ## Setup & Environment

@@ -8,11 +8,20 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from ninja import Router, Schema
-from ninja.security import HttpBearer
 from ninja.errors import HttpError
+from ninja.security import HttpBearer
 
 from pipeline.client import trigger_analysis
-from .models import Market, Product, ProductMarket, Video, VideoProduct, VideoProductSource, VideoStatus
+
+from .models import (
+    Market,
+    Product,
+    ProductMarket,
+    Video,
+    VideoProduct,
+    VideoProductSource,
+    VideoStatus,
+)
 
 
 class BearerAuth(HttpBearer):

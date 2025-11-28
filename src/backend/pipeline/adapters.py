@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List
 
@@ -46,7 +47,6 @@ class OpenAIProvider(LLMProvider):
         response = litellm.completion(model=self.model, messages=[{"role": "user", "content": prompt}])
         content = response.choices[0].message["content"]  # type: ignore[index]
         try:
-            import json  # noqa: WPS433
             parsed = json.loads(content)
             if isinstance(parsed, list):
                 return parsed  # pragma: no cover - depends on model response
