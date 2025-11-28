@@ -22,7 +22,9 @@ class PipelineIntegrationTests(TestCase):
             username="creator", email="creator@example.com", password="pass"
         )
         self.video = Video.objects.create(
-            user=self.user, youtube_url="https://youtu.be/mock", slug="mock-video"
+            user=self.user,
+            youtube_url="https://youtu.be/mock",
+            slug="mock-video",
         )
 
     def test_trigger_analysis_updates_status(self):

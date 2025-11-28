@@ -20,7 +20,7 @@ from video.models import (
 
 
 def trigger_analysis(video_id: int, use_mock: bool = True) -> Dict[str, Any]:
-    """Trigger analysis. If Modal is available, it could be plugged here; otherwise run sync."""
+    """Trigger analysis locally; swap to Modal if needed."""
     video = Video.objects.select_related("user").get(pk=video_id)
     provider = MockProvider() if use_mock else OpenAIProvider()
     return _run_and_persist(video, provider)
@@ -49,7 +49,9 @@ def _persist_products(video: Video, result: PipelineResult) -> None:
     for index, item in enumerate(result.found):
         product = None
         if asin := item.get("asin"):
-            product, _ = Product.objects.get_or_create(name=item.get("name", asin))
+            product, _ = Product.objects.get_or_create(
+                name=item.get("name", asin)
+            )
             ProductMarket.objects.get_or_create(
                 product=product, market=Market.AMAZON, market_product_id=asin
             )

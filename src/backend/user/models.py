@@ -11,7 +11,9 @@ class User(AbstractUser):
     """Custom user with credit balance."""
 
     credits = models.PositiveIntegerField(default=0)
-    api_token = models.CharField(max_length=64, unique=True, default="", blank=True)
+    api_token = models.CharField(
+        max_length=64, unique=True, default="", blank=True
+    )
 
     def save(self, *args, **kwargs):  # type: ignore[override]
         if not self.api_token:

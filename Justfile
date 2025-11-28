@@ -11,6 +11,8 @@ check:
 	cd {{backend_dir}} && uv run ruff format --check .
 	cd {{backend_dir}} && PYTHONPATH=. uv run mypy .
 
+lint: check
+
 run:
 	cd {{backend_dir}} && uv run python manage.py runserver 0.0.0.0:8000
 

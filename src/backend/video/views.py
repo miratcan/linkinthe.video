@@ -1,1 +1,1 @@
-from django.shortcuts import render
+"""Video views placeholder."""

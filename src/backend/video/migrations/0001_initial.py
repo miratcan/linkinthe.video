@@ -6,7 +6,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
@@ -131,7 +130,9 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "market",
-                    models.CharField(choices=[("amazon", "Amazon")], max_length=50),
+                    models.CharField(
+                        choices=[("amazon", "Amazon")], max_length=50
+                    ),
                 ),
                 ("market_product_id", models.CharField(max_length=255)),
                 (
@@ -144,7 +145,9 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
-                "unique_together": {("product", "market", "market_product_id")},
+                "unique_together": {
+                    ("product", "market", "market_product_id")
+                },
             },
         ),
     ]

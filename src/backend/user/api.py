@@ -101,9 +101,17 @@ def delete_user(request, user_id: int):
 @router.post("auth/register", response={201: AuthResponseSchema})
 def register(request, payload: AuthRegisterSchema):
     username = payload.username or payload.email.split("@")[0]
-    user = User.objects.create_user(username=username, email=payload.email, password=payload.password)
+    user = User.objects.create_user(
+        username=username,
+        email=payload.email,
+        password=payload.password,
+    )
     login(request, user, backend="django.contrib.auth.backends.ModelBackend")
-    return 201, {"user": user, "session": request.session.session_key, "token": user.api_token}
+    return 201, {
+        "user": user,
+        "session": request.session.session_key,
+        "token": user.api_token,
+    }
 
 
 @router.post("auth/login", response=AuthResponseSchema)
@@ -114,7 +122,11 @@ def auth_login(request, payload: AuthLoginSchema):
     if not user:
         return 401, {"detail": "Invalid credentials"}
     login(request, user, backend="django.contrib.auth.backends.ModelBackend")
-    return {"user": user, "session": request.session.session_key, "token": user.api_token}
+    return {
+        "user": user,
+        "session": request.session.session_key,
+        "token": user.api_token,
+    }
 
 
 @router.post("auth/logout", response={204: None})
@@ -127,11 +139,17 @@ def auth_logout(request):
 def auth_me(request):
     if not request.user.is_authenticated:
         return 401, {"detail": "Not authenticated"}
-    return {"user": request.user, "session": request.session.session_key, "token": request.user.api_token}
+    return {
+        "user": request.user,
+        "session": request.session.session_key,
+        "token": request.user.api_token,
+    }
 
 
 @router.post("auth/google", response=dict)
 def auth_google(request):
-    """Return Google OAuth start URL (callback handled by allauth at /accounts/google/login/)."""
-    auth_url = request.build_absolute_uri(reverse("socialaccount_login", args=["google"]))
+    """Return Google OAuth start URL for allauth callback."""
+    auth_url = request.build_absolute_uri(
+        reverse("socialaccount_login", args=["google"])
+    )
     return {"authorization_url": auth_url}

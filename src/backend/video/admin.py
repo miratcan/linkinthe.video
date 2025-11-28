@@ -10,7 +10,15 @@ from .models import Product, ProductMarket, Video, VideoProduct
 class VideoProductInline(admin.TabularInline):
     model = VideoProduct
     extra = 1
-    fields = ("product", "name", "timestamp", "source", "is_reviewed", "is_found", "sort_order")
+    fields = (
+        "product",
+        "name",
+        "timestamp",
+        "source",
+        "is_reviewed",
+        "is_found",
+        "sort_order",
+    )
     autocomplete_fields = ("product",)
 
 

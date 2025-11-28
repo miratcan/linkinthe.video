@@ -16,7 +16,9 @@ class Video(models.Model):
     """Represents a processed or processing video."""
 
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="videos"
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="videos",
     )
     youtube_url = models.URLField()
     status = models.CharField(
@@ -48,7 +50,9 @@ class Market(models.TextChoices):
 class ProductMarket(models.Model):
     """Mapping between a product and a specific market listing."""
 
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="markets")
+    product = models.ForeignKey(
+        Product, on_delete=models.CASCADE, related_name="markets"
+    )
     market = models.CharField(max_length=50, choices=Market.choices)
     market_product_id = models.CharField(max_length=255)
 
@@ -69,7 +73,9 @@ class VideoProductSource(models.TextChoices):
 class VideoProduct(models.Model):
     """Association between a video and a product (found or lost)."""
 
-    video = models.ForeignKey(Video, on_delete=models.CASCADE, related_name="video_products")
+    video = models.ForeignKey(
+        Video, on_delete=models.CASCADE, related_name="video_products"
+    )
     product = models.ForeignKey(
         Product,
         on_delete=models.SET_NULL,
@@ -79,7 +85,9 @@ class VideoProduct(models.Model):
     )
     name = models.CharField(max_length=255, blank=True)
     timestamp = models.CharField(max_length=10, blank=True)
-    source = models.CharField(max_length=20, choices=VideoProductSource.choices)
+    source = models.CharField(
+        max_length=20, choices=VideoProductSource.choices
+    )
     is_reviewed = models.BooleanField(default=False)
     is_found = models.BooleanField(default=True)
     sort_order = models.PositiveIntegerField(default=0)
@@ -88,4 +96,6 @@ class VideoProduct(models.Model):
         ordering = ["sort_order", "id"]
 
     def __str__(self) -> str:
-        return self.name or (self.product.name if self.product else "Unnamed Product")
+        return self.name or (
+            self.product.name if self.product else "Unnamed Product"
+        )

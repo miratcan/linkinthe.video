@@ -10,5 +10,7 @@ from .models import User
 
 @admin.register(User)
 class UserAdmin(DjangoUserAdmin):
-    fieldsets = DjangoUserAdmin.fieldsets + (("Credits", {"fields": ("credits",)}),)
+    fieldsets = DjangoUserAdmin.fieldsets + (
+        ("Credits", {"fields": ("credits",)}),
+    )
     list_display = DjangoUserAdmin.list_display + ("credits",)

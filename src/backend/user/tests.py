@@ -8,7 +8,13 @@ class UserApiTests(TestCase):
     def test_user_crud_flow_and_auth(self):
         create_resp = self.client.post(
             "/api/users/",
-            data=json.dumps({"username": "apiuser", "email": "api@example.com", "credits": 10}),
+            data=json.dumps(
+                {
+                    "username": "apiuser",
+                    "email": "api@example.com",
+                    "credits": 10,
+                }
+            ),
             content_type="application/json",
         )
         self.assertEqual(create_resp.status_code, 201)
@@ -24,7 +30,9 @@ class UserApiTests(TestCase):
 
         register_resp = self.client.post(
             "/api/auth/register",
-            data=json.dumps({"email": "new@example.com", "password": "pass1234"}),
+            data=json.dumps(
+                {"email": "new@example.com", "password": "pass1234"}
+            ),
             content_type="application/json",
         )
         self.assertEqual(register_resp.status_code, 201)
