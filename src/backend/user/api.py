@@ -9,8 +9,19 @@ from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.utils.crypto import get_random_string
 from ninja import Router, Schema
+from ninja.security import HttpBearer
 
 User = get_user_model()
+
+
+class BearerAuth(HttpBearer):
+    """Token-based authentication for API endpoints."""
+
+    def authenticate(self, request, token: str):
+        """Return user if token is valid, None otherwise."""
+        return User.objects.filter(api_token=token).first()
+
+
 router = Router(tags=["users"])
 
 
@@ -52,13 +63,23 @@ class AuthResponseSchema(Schema):
     token: str
 
 
-@router.get("users/", response=list[UserSchema])
+@router.get("users/", response={200: list[UserSchema], 401: dict, 403: dict})
 def list_users(request):
-    return User.objects.all().order_by("id")
+    """List users - admin only."""
+    if not request.user.is_authenticated:
+        return 401, {"detail": "Authentication required"}
+    if not request.user.is_staff:
+        return 403, {"detail": "Admin access required"}
+    return 200, User.objects.all().order_by("id")
 
 
-@router.post("users/", response={201: UserSchema})
+@router.post("users/", response={201: UserSchema, 401: dict, 403: dict})
 def create_user(request, payload: UserCreateSchema):
+    """Create user - admin only."""
+    if not request.user.is_authenticated:
+        return 401, {"detail": "Authentication required"}
+    if not request.user.is_staff:
+        return 403, {"detail": "Admin access required"}
     password = payload.password or get_random_string(12)
     user = User.objects.create_user(
         username=payload.username,
@@ -71,28 +92,49 @@ def create_user(request, payload: UserCreateSchema):
     return 201, user
 
 
-@router.get("users/{user_id}/", response=UserSchema)
+@router.get(
+    "users/{user_id}/", response={200: UserSchema, 401: dict, 403: dict}
+)
 def get_user(request, user_id: int):
-    return get_object_or_404(User, pk=user_id)
+    """Get user - self or admin only."""
+    if not request.user.is_authenticated:
+        return 401, {"detail": "Authentication required"}
+    if not request.user.is_staff and request.user.id != user_id:
+        return 403, {"detail": "Access denied"}
+    return 200, get_object_or_404(User, pk=user_id)
 
 
-@router.patch("users/{user_id}/", response=UserSchema)
+@router.patch(
+    "users/{user_id}/", response={200: UserSchema, 401: dict, 403: dict}
+)
 def update_user(request, user_id: int, payload: UserUpdateSchema):
+    """Update user - self or admin only. Only admin can change credits."""
+    if not request.user.is_authenticated:
+        return 401, {"detail": "Authentication required"}
+    if not request.user.is_staff and request.user.id != user_id:
+        return 403, {"detail": "Access denied"}
     user = get_object_or_404(User, pk=user_id)
     if payload.username is not None:
         user.username = payload.username
     if payload.email is not None:
         user.email = payload.email
     if payload.credits is not None:
+        if not request.user.is_staff:
+            return 403, {"detail": "Only admin can modify credits"}
         user.credits = payload.credits
     if payload.password:
         user.set_password(payload.password)
     user.save()
-    return user
+    return 200, user
 
 
-@router.delete("users/{user_id}/", response={204: None})
+@router.delete("users/{user_id}/", response={204: None, 401: dict, 403: dict})
 def delete_user(request, user_id: int):
+    """Delete user - admin only."""
+    if not request.user.is_authenticated:
+        return 401, {"detail": "Authentication required"}
+    if not request.user.is_staff:
+        return 403, {"detail": "Admin access required"}
     user = get_object_or_404(User, pk=user_id)
     user.delete()
     return 204, None

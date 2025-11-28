@@ -13,6 +13,8 @@ dependencies = [
     "django-anymail[resend]>=12.0",
     "PyJWT>=2.9",
     "cryptography>=43.0.1",
+    "yt-dlp>=2024.8.6",
+    "ffmpeg-python>=0.2.0",
 ]
 
 [project.optional-dependencies]
@@ -78,18 +80,14 @@ module = ["environ"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["pipeline.*", "user.api", "user.admin", "user.tests", "user.models"]
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = ["video.api", "video.admin", "video.tests"]
-ignore_errors = true
+module = ["allauth.*", "ninja.*", "ffmpeg.*", "yt_dlp.*", "litellm.*", "modal.*"]
+ignore_missing_imports = true
 
 [tool.django-stubs]
 django_settings_module = "config.settings"
 
-[tool.uv]
-dev-dependencies = ["ruff>=0.7", "mypy>=1.13", "django-stubs>=5.1.1"]
+[dependency-groups]
+dev = ["ruff>=0.7", "mypy>=1.13", "django-stubs>=5.1.1"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["config"]

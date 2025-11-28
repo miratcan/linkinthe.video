@@ -36,3 +36,18 @@
 ## Security & Configuration
 - Do not commit `.env` or secrets. Update `.env.example` when adding required configuration.
 - Set `ALLOWED_HOSTS` and `DEBUG` appropriately per environment; provide a real `RESEND_API_KEY` outside local development before enabling email sending.
+
+## Product Intent (observed)
+- linkinthe.video helps YouTube creators auto-detect products mentioned in videos and publish a clean, branded affiliate guide page (replace messy description links).
+- Target: tech-review micro creators (10K-100K subs) who already use Amazon affiliates; credits-based pricing with free starter credits.
+
+## Current Implementation Snapshot
+- Backend: Django + shinobi API with custom `User` (credits + `api_token`). `video` app has `Video` CRUD (credit check on create), `Product` + `ProductMarket` (Amazon/Trendyol enums), `VideoProduct` associations, status/publish endpoints, bearer auth via `api_token`.
+- Pipeline: `pipeline/steps.py` stubs download→audio→transcribe→LLM; `pipeline/adapters.py` has Mock provider and optional OpenAI via litellm; `pipeline/client.py` runs analysis with mock provider by default and persists found products; Modal wrapper scaffolded. No real yt-dlp/ffmpeg/Whisper/vision/Amazon integration yet.
+- Frontend: Next.js 14 App Router starter page only; Tailwind + shadcn/ui wired with a Button component. No dashboard/auth/review/publish UI implemented.
+- Tests: Django TestCases cover user and video CRUD flows, credits enforcement, API docs, pipeline happy path with mock provider.
+
+## Gaps / Next Steps to reach V1 value
+- Implement real pipeline steps (download, audio, transcription, LLM prompt tuning, optional vision, Amazon lookup) and harden error handling/observability.
+- Build creator-facing UI: auth/onboarding, credit display, video submission + progress polling, review table (found/lost, ASIN/manual entry), publishable guide page.
+- Add affiliate/link management (Amazon compliance, geo-aware links), background job reliability (Modal), and metrics for detection quality/time-to-value.

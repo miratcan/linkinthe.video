@@ -121,6 +121,41 @@ ANYMAIL = {
     "RESEND_API_KEY": env("RESEND_API_KEY", default=None),
 }
 
+PIPELINE_USE_REAL_DOWNLOAD = env.bool(
+    "PIPELINE_USE_REAL_DOWNLOAD", default=False
+)
+PIPELINE_USE_REAL_AUDIO = env.bool(
+    "PIPELINE_USE_REAL_AUDIO", default=False
+)
+
+# =============================================================================
+# Provider Configuration
+# =============================================================================
+# Available providers:
+#   transcription: mock, whisper, gemini
+#   vision: mock, openai, gemini
+#   llm: mock, openai, gemini
+#   product_search: mock, amazon
+
+PIPELINE_PROVIDERS = {
+    "transcription": env("PIPELINE_TRANSCRIPTION_PROVIDER", default="mock"),
+    "vision": env("PIPELINE_VISION_PROVIDER", default="mock"),
+    "llm": env("PIPELINE_LLM_PROVIDER", default="mock"),
+    "product_search": env("PIPELINE_PRODUCT_SEARCH_PROVIDER", default="mock"),
+}
+
+# Provider-specific settings
+PIPELINE_LLM_MODEL = env("PIPELINE_LLM_MODEL", default="gpt-4o-mini")
+PIPELINE_VISION_MODEL = env("PIPELINE_VISION_MODEL", default="gpt-4o-mini")
+PIPELINE_TRANSCRIPTION_MODEL = env(
+    "PIPELINE_TRANSCRIPTION_MODEL", default="whisper-1"
+)
+
+# Amazon PA-API credentials (for product search)
+AMAZON_ACCESS_KEY = env("AMAZON_ACCESS_KEY", default="")
+AMAZON_SECRET_KEY = env("AMAZON_SECRET_KEY", default="")
+AMAZON_PARTNER_TAG = env("AMAZON_PARTNER_TAG", default="")
+
 SOCIALACCOUNT_PROVIDERS = {
     "google": {
         "APP": {

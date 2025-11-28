@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+# Optional: only needed for remote execution on Modal.
 try:
     import modal  # type: ignore
 except ImportError:  # pragma: no cover - modal is optional in CI/tests

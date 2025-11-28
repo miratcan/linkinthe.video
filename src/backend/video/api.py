@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Optional
 
 from django.contrib.auth import get_user_model
+from django.db import transaction
+from django.db.models import F
 from django.shortcuts import get_object_or_404
 from ninja import Router, Schema
 from ninja.security import HttpBearer
@@ -20,15 +22,18 @@ from .models import (
     VideoStatus,
 )
 
+User = get_user_model()
+
 
 class BearerAuth(HttpBearer):
-    def authenticate(self, request, token):
-        user = User.objects.filter(api_token=token).first()
-        return user
+    """Token-based authentication for API endpoints."""
+
+    def authenticate(self, request, token: str):
+        """Return user if token is valid, None otherwise."""
+        return User.objects.filter(api_token=token).first()
 
 
 router = Router(tags=["videos"], auth=BearerAuth())
-User = get_user_model()
 
 
 AUTH_ERROR_RESPONSE = (401, {"detail": "Authentication required"})
@@ -157,18 +162,24 @@ def create_video(request, payload: VideoCreateSchema):
     user, error = _require_auth(request)
     if error:
         return error
-    if user.credits <= 0:
-        return 402, {"detail": "Insufficient credits"}
     if payload.user_id != user.id:
         return 403, {"detail": "Cannot create videos for other users"}
-    video = Video.objects.create(
-        user=user,
-        youtube_url=payload.youtube_url,
-        slug=payload.slug,
-        status=payload.status or Video._meta.get_field("status").default,
-    )
-    user.credits -= 1
-    user.save(update_fields=["credits"])
+
+    with transaction.atomic():
+        # Lock user row to prevent race condition
+        locked_user = User.objects.select_for_update().get(pk=user.id)
+        if locked_user.credits <= 0:
+            return 402, {"detail": "Insufficient credits"}
+
+        video = Video.objects.create(
+            user=locked_user,
+            youtube_url=payload.youtube_url,
+            slug=payload.slug,
+            status=payload.status or Video._meta.get_field("status").default,
+        )
+        # Atomic decrement using F expression
+        User.objects.filter(pk=user.id).update(credits=F("credits") - 1)
+
     return 201, video
 
 
@@ -208,33 +219,50 @@ def delete_video(request, video_id: int):
     return 204, None
 
 
-@router.get("products/", response=list[ProductSchema])
+@router.get("products/", response={200: list[ProductSchema], 401: dict})
 def list_products(request):
-    return Product.objects.all().order_by("id")
+    user, error = _require_auth(request)
+    if error:
+        return error
+    return 200, Product.objects.all().order_by("id")
 
 
-@router.post("products/", response={201: ProductSchema})
+@router.post("products/", response={201: ProductSchema, 401: dict})
 def create_product(request, payload: ProductCreateSchema):
+    user, error = _require_auth(request)
+    if error:
+        return error
     product = Product.objects.create(name=payload.name)
     return 201, product
 
 
-@router.get("products/{product_id}/", response=ProductSchema)
+@router.get("products/{product_id}/", response={200: ProductSchema, 401: dict})
 def get_product(request, product_id: int):
-    return get_object_or_404(Product, pk=product_id)
+    user, error = _require_auth(request)
+    if error:
+        return error
+    return 200, get_object_or_404(Product, pk=product_id)
 
 
-@router.patch("products/{product_id}/", response=ProductSchema)
+@router.patch(
+    "products/{product_id}/", response={200: ProductSchema, 401: dict}
+)
 def update_product(request, product_id: int, payload: ProductUpdateSchema):
+    user, error = _require_auth(request)
+    if error:
+        return error
     product = get_object_or_404(Product, pk=product_id)
     if payload.name is not None:
         product.name = payload.name
     product.save()
-    return product
+    return 200, product
 
 
-@router.delete("products/{product_id}/", response={204: None})
+@router.delete("products/{product_id}/", response={204: None, 401: dict})
 def delete_product(request, product_id: int):
+    user, error = _require_auth(request)
+    if error:
+        return error
     product = get_object_or_404(Product, pk=product_id)
     product.delete()
     return 204, None
@@ -441,7 +469,7 @@ def video_products_create(
 
 @router.patch(
     "videos/{video_id}/products/{video_product_id}",
-    response=VideoProductSchema,
+    response={200: VideoProductSchema, 401: dict, 404: dict},
 )
 def video_products_update(
     request,
@@ -449,8 +477,44 @@ def video_products_update(
     video_product_id: int,
     payload: VideoProductUpdateSchema,
 ):
-    payload.video_id = video_id
-    return update_video_product(request, video_product_id, payload)
+    user, error = _require_auth(request)
+    if error:
+        return error
+    # Verify video_product belongs to this video and user
+    video_product = get_object_or_404(
+        VideoProduct,
+        pk=video_product_id,
+        video_id=video_id,
+        video__user=user,
+    )
+    if payload.product_id is not None:
+        video_product.product = get_object_or_404(
+            Product, pk=payload.product_id
+        )
+    if payload.amazon_url:
+        asin = _extract_amazon_asin(payload.amazon_url)
+        product = video_product.product or Product.objects.create(
+            name=payload.name or asin or "Manual product"
+        )
+        if asin:
+            ProductMarket.objects.get_or_create(
+                product=product, market=Market.AMAZON, market_product_id=asin
+            )
+        video_product.product = product
+    if payload.name is not None:
+        video_product.name = payload.name or video_product.name
+    if payload.timestamp is not None:
+        video_product.timestamp = payload.timestamp
+    if payload.source is not None:
+        video_product.source = payload.source
+    if payload.is_reviewed is not None:
+        video_product.is_reviewed = payload.is_reviewed
+    if payload.is_found is not None:
+        video_product.is_found = payload.is_found
+    if payload.sort_order is not None:
+        video_product.sort_order = payload.sort_order
+    video_product.save()
+    return 200, video_product
 
 
 @router.delete(
